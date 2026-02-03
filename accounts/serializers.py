@@ -3,6 +3,10 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from django.contrib.auth.password_validation import validate_password
 
+from accounts.models import CartItem,Cart
+from products.serializers import ProductSerializer
+
+
 class SignUpSerializer(serializers.ModelSerializer):
     confirm_pass = serializers.CharField(write_only=True)
     class Meta:
@@ -46,6 +50,20 @@ class ChangePasswordSerializer(serializers.Serializer):
         return user
 
 
+class CartItemSerializer(serializers.ModelSerializer):
+    product=ProductSerializer(read_only=True)
+
+    class Meta:
+        model=CartItem
+        fields=("id","product","quantity")
+
+
+class CartSerializer(serializers.ModelSerializer):
+    items=CartItemSerializer(many=True)
+
+    class Meta:
+        model=Cart
+        fields=("id","items")
 
 
 

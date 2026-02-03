@@ -3,7 +3,7 @@ from http.client import HTTPResponse
 from django.shortcuts import render
 from django.template.context_processors import request
 from rest_framework.generics import CreateAPIView
-from .serializers import SignUpSerializer, ChangePasswordSerializer
+from .serializers import SignUpSerializer, ChangePasswordSerializer, CartSerializer
 from django.contrib.auth.models import User
 from rest_framework.views import APIView
 from rest_framework import status
@@ -14,7 +14,8 @@ from rest_framework.exceptions import ValidationError
 from rest_framework import permissions
 from .utility import send_simple_email,check_email
 from random import randint
-from .models import VerifyCodes
+from rest_framework.permissions import IsAuthenticated
+from .models import VerifyCodes,CartItem,Cart,OrderItem,Order
 class SignUpView(APIView):
     serializer_class = SignUpSerializer
     queryset = User
@@ -165,7 +166,133 @@ class ForgotView(APIView):
         return HTTPResponse(data)
 
 class ResetCodeView(APIView):
-    pass
+    def post(self,request):
+        serializers=ResetCodeView
 
 
+class CartView(APIView):
+    permission_classes=[IsAuthenticated]
 
+    def get(self,request):
+        cart,_=Cart.objects.get_or_create(user=request.user)
+        serializer=CartSerializer(cart)
+        return Response(serializer.data)
+
+class CartAddView(APIView):
+    permission_classes=[IsAuthenticated]
+
+    def post(self,request):
+        product_id=request.data('product_id')
+        quantity=int(request.data.get('quantity',1))
+
+        cart,_=Cart.objects.get_or_create(user=request.user)
+        product=Product.objects.get(id=product_id)
+
+        item.created=CartItem.objects.get_or_create(
+            cart=cart,product=product
+        )
+
+        if not created:
+            item.quantity +=quantity
+        item.save()
+
+        return Response({'detail':'Mahsulot qoshildi'})
+
+
+class CartRemoveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        product_id = request.data.get("product_id")
+        cart = Cart.objects.get(user=request.user)
+        CartItem.objects.filter(cart=cart, product_id=product_id).delete()
+        return Response({"detail": "Mahsulot savatdan o'chirildi"})
+
+
+class CartUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        product_id = request.data.get("product_id")
+        quantity = int(request.data.get("quantity"))
+
+        cart = Cart.objects.get(user=request.user)
+        item = CartItem.objects.get(cart=cart, product_id=product_id)
+
+        item.quantity = quantity
+        item.save()
+
+        return Response({"Mahsulot yangilandi"})
+
+
+class CartClearView(APIView):
+    permission_classes=[IsAuthenticated]
+
+    def post(self,request):
+        cart=Cart.objects.get(user=request.user)
+        cart.items.all().delete()
+        return Response({'detail':"Savat tozalandi"})
+
+class OrderCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        cart = Cart.objects.get(user=request.user)
+
+        if not cart.items.exists():
+            return Response({"error": "Savat bo'sh"}, status=status.HTTP_400_BAD_REQUEST)
+
+        order = Order.objects.create(user=request.user)
+        total = 0
+
+        for item in cart.items.all():
+            OrderItem.objects.create(
+                order=order,
+                product=item.product,
+                price=item.product.price,
+                quantity=item.quantity
+            )
+
+            total += item.product.price * item.quantity
+
+        order.total_price = total
+        order.save()
+
+        cart.items.all().delete()
+
+        return Response({"detail": "Buyurtma muvaffaqiyatli yaratildi"}, status=status.HTTP_201_CREATED)
+
+
+class OrderListView(APIView):
+    permission_classes=[IsAuthenticated]
+
+    def get(self,request):
+        orders=Order.objects.filter(user=request.user)
+        serializer=OrderSerializer(orders,many=True)
+        return Response(serializer.data)
+
+class OrderDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, id):
+        order = Order.objects.get(id=id, user=request.user)
+        serializer = OrderSerializer(order)
+        return Response(serializer.data)
+
+class OrderDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, id):
+        order = Order.objects.get(id=id, user=request.user)
+        serializer = OrderSerializer(order)
+        return Response(serializer.data)
+
+
+class OrderCancelView(APIView):
+    permission_classes=[IsAuthenticated]
+
+    def delete(self,request,id):
+        order=Order.objects.get(id=id,user=request.user)
+        order.status='cancelled'
+        order.save()
+        return Response({"detail":'Buyurtma ochirildi '})
